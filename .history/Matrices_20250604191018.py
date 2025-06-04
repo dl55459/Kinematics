@@ -1,33 +1,41 @@
 import sympy as sp
+phi, theta = sp.symbols("phi theta", real=True)
 
-x, y, z, r1, r2, r3, r4, r5, r6, r7, r8, r9 = sp.symbols("x y z r1 r2 r3 r4 r5 r6 r7 r8 r9", real=True)
+    # xi(xi-1)
+    # yi(yi-1)
+    # zi(zi-1)
 
-BaseMotor_T = sp.Matrix([
-    [x],
-    [y],
-    [z]
-])
-BaseMotor_R = sp.Matrix([
-    [r1, r2, r3],
-    [r4, r5, r6],
-    [r7, r8, r9]
-])
-PitchMotor_T = sp.Matrix([
-    [1],
+    # [xi(xi-1), xi(yi-1), xi(zi-1)]
+    # [yi(xi-1), yi(yi-1), yi(zi-1)]
+    # [zi(xi-1), zi(yi-1), zi(zi-1)]
+
+BM1_T = sp.Matrix([
     [0],
-    [0]
-])
-PitchMotor_R = sp.Matrix([
-    [1, 0, 0],
-    [0, 1, 0],
-    [0, 0, 1]
-])
-EndMotor_T = sp.Matrix([
-    [1],
     [0],
-    [0]
+    [41.9]
 ])
-EndMotor_R = sp.Matrix([
+
+BM1_R = sp.Matrix([
+    [sp.cos(phi), -sp.sin(phi), 0],
+    [sp.sin(phi),  sp.cos(phi), 0],
+    [          0,            0, 1]
+])
+M1M3_T = sp.Matrix([
+    [190],
+    [0],
+    [-0.55]
+])
+M1M3_R = sp.Matrix([
+    [sp.cos(theta), -sp.sin(theta), 0],
+    [sp.sin(theta),  sp.cos(theta), 0],
+    [          0,                0, 1]
+])
+M3EE_T = sp.Matrix([
+    [189],
+    [0],
+    [39.35]
+])
+M3EE_R = sp.Matrix([
     [1, 0, 0],
     [0, 1, 0],
     [0, 0, 1]
@@ -35,6 +43,8 @@ EndMotor_R = sp.Matrix([
 Expanded = sp.Matrix([
     [0, 0, 0, 1]
 ])
+IdlePos = 0;
+ActivePos = 0;
 
 # Step 1: Horizontally stack R and T to form the top 3 rows
 Top = BaseMotor_R.row_join(BaseMotor_T)
