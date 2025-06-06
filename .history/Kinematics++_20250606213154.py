@@ -17,7 +17,6 @@ from math import atan2, cos, sin, pi
     # LEz z-component of distance between motor 3 and end effector
 
     # phi    angle of motor 1
-    # alpha  angle of motor 2
     # theta  angle of motor 3
 
 """
@@ -173,8 +172,21 @@ xDesired = 10 # Desired x coordinate
 yDesired = 10 # Desired y coordinate
 LM1M3 = 190 # x-component of distance between motor 1 and motor 3
 LM3EE = 189 # x-component of distance between motor 3 and end effector
-phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, xDesired, yDesired) # Get angles for motor 1 and motor 3 based on desired x, y destination
-sp.pprint(phiD) # Display angle for motor 1
-sp.pprint(thetaD) # Display angle for motor 2
+
+if (xDesired >= -25.487) and (xDesired <= 224.513) and (yDesired >= -175) and (yDesired <= 175):
+    print("Inside work area")
+
+    if (124.513 >=xDesired >= 25,487) and (75 >= yDesired >= -75):
+        print("Inaccessible area")
+
+    else:
+        print("Bingo")
+
+        phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, xDesired, yDesired) # Get angles for motor 1 and motor 3 based on desired x, y destination
+        sp.pprint(phiD) # Display angle for motor 1
+        sp.pprint(thetaD) # Display angle for motor 2
+
+else:
+    print("Outside working area")
 
 phiD, alphaD, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)

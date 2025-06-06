@@ -17,7 +17,6 @@ from math import atan2, cos, sin, pi
     # LEz z-component of distance between motor 3 and end effector
 
     # phi    angle of motor 1
-    # alpha  angle of motor 2
     # theta  angle of motor 3
 
 """

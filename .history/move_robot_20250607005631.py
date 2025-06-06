@@ -1,6 +1,17 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from rclpy.duration import Duration
+import time
+import numpy as np
 import sympy as sp
 import math as math
 from math import atan2, cos, sin, pi
+
+from control_msgs.action import FollowJointTrajectory
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
     # xi(xi-1)
     # yi(yi-1)
@@ -17,7 +28,6 @@ from math import atan2, cos, sin, pi
     # LEz z-component of distance between motor 3 and end effector
 
     # phi    angle of motor 1
-    # alpha  angle of motor 2
     # theta  angle of motor 3
 
 """
@@ -173,8 +183,81 @@ xDesired = 10 # Desired x coordinate
 yDesired = 10 # Desired y coordinate
 LM1M3 = 190 # x-component of distance between motor 1 and motor 3
 LM3EE = 189 # x-component of distance between motor 3 and end effector
-phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, xDesired, yDesired) # Get angles for motor 1 and motor 3 based on desired x, y destination
-sp.pprint(phiD) # Display angle for motor 1
-sp.pprint(thetaD) # Display angle for motor 2
 
-phiD, alphaD, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
+if (-25.487 <= xDesired <= 324.513) and (-175 <= yDesired <= 175):
+    print("Inside work area")
+
+    if (25.487 <= xDesired <= 124.513) and (-75 <= yDesired <= 75):
+        print("Unacessible area")
+
+    else:
+        print("Bingo")
+
+        phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, xDesired, yDesired) # Get angles for motor 1 and motor 3 based on desired x, y destination
+        sp.pprint(phiD) # Display angle for motor 1
+        sp.pprint(thetaD) # Display angle for motor 2
+
+else:
+    print("Outside working area")
+
+#phiD, alphaD, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
+
+
+class prarobClientNode(Node):
+    def __init__(self):
+        super().__init__('prarob_client_node')
+
+        # Define publisher
+        self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
+
+        # TEST single point
+        print("move1 begin")
+        print(self.move_robot([phiD, 0, thetaD]))
+        print("move1 end")
+        self.get_clock().sleep_for(Duration(seconds=6.0))
+        print("move2 begin")
+        print(self.move_robot([phiD, 0, thetaD]))
+        print("move2 end")
+        self.get_clock().sleep_for(Duration(seconds=6.0))
+        print("move3 begin")
+        print(self.move_robot([phiD, 0, thetaD]))
+        print("move3 end")
+        print("move4 begin")
+        print(self.move_robot([phiD, 0, thetaD]))
+        print("move4 end")
+        self.get_clock().sleep_for(Duration(seconds=6.0))
+        print("move5 begin")
+        print(self.move_robot([phiD, 0, thetaD]))
+        print("move5 end")
+        self.get_clock().sleep_for(Duration(seconds=6.0))
+        print("move6 begin")
+        print(self.move_robot([phiD, 0, thetaD]))
+        print("move6 end")
+
+
+    def move_robot(self, q):
+
+        goal_trajectory = JointTrajectory()
+        goal_trajectory.joint_names.append('joint1')
+        goal_trajectory.joint_names.append('joint2')
+        goal_trajectory.joint_names.append('joint3')
+
+        goal_point = JointTrajectoryPoint()
+        goal_point.positions.append(q[0])
+        goal_point.positions.append(q[1])
+        goal_point.positions.append(q[2])
+        goal_point.time_from_start = Duration(seconds=5).to_msg()
+
+        goal_trajectory.points.append(goal_point)
+
+        return self.robot_goal_publisher_.publish(goal_trajectory)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = prarobClientNode()
+    rclpy.spin(node)
+    rclpy.shutdown()
+
+if __name__=='__main__':
+    main()

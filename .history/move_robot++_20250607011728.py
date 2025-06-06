@@ -1,6 +1,17 @@
+#!/usr/bin/env python3
+
+import rclpy
+from rclpy.action import ActionClient
+from rclpy.node import Node
+from rclpy.duration import Duration
+import time
+import numpy as np
 import sympy as sp
 import math as math
 from math import atan2, cos, sin, pi
+
+from control_msgs.action import FollowJointTrajectory
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
     # xi(xi-1)
     # yi(yi-1)
@@ -17,7 +28,6 @@ from math import atan2, cos, sin, pi
     # LEz z-component of distance between motor 3 and end effector
 
     # phi    angle of motor 1
-    # alpha  angle of motor 2
     # theta  angle of motor 3
 
 """
@@ -130,17 +140,27 @@ def inverse(T_BEE, LM1M3, LM3EE, xDesired, yDesired):
 
     return phiDesired, thetaDesired
 
+def DEG2RAD(degree):
+
+    rad = degree * (np.pi/180)
+    return rad
+
+def mm2m(mm):
+
+    m = mm/1000
+    return m
+
 # Function sets default positions for active and in-active operation mode
 def activePos(flag):
     # Check for activity flag
     if flag == 1:
-        phiActive = 0
-        alphaActive = 0 # Active angle for motor 2 (pitch)
-        thetaActive = 0
+        phiActive = DEG2RAD(0)
+        alphaActive = DEG2RAD(0) # Active angle for motor 2 (pitch)
+        thetaActive = DEG2RAD(0)
     else:
-        phiActive = 0 # Idle angle for motor 1
-        alphaActive = pi/2 # Idle angle for motor 2
-        thetaActive = 3*pi/2 # Idle angle for motor 3
+        phiActive = DEG2RAD(180) # Idle angle for motor 1
+        alphaActive = DEG2RAD(270) # Idle angle for motor 2
+        thetaActive = DEG2RAD(195) # Idle angle for motor 3
 
     return phiActive, alphaActive, thetaActive
 
@@ -161,20 +181,103 @@ def topicIn():
 # Main section of the code
 phiD, alphaD, thetaD = activePos(False) # Set arm to idle position (All positions taken to account)
 
-L1z = 41.9 # z-component of distance between base and motor 1
-L3x = 190 # x-component of distance between motor 1 and motor 3
-L3z = -0.55 # z-component of distance between motor 1 and motor 3
-LEx = 189 # x-component of distance between motor 3 and end effector
-LEz = 39.35 # z-component of distance between motor 3 and end effector
+L1z = mm2m(41.9) # z-component of distance between base and motor 1
+L3x = mm2m(190) # x-component of distance between motor 1 and motor 3
+L3z = mm2m(-0.55) # z-component of distance between motor 1 and motor 3
+LEx = mm2m(189) # x-component of distance between motor 3 and end effector
+LEz = mm2m(39.35) # z-component of distance between motor 3 and end effector
 DIRECT_MAT = direct(L1z, L3x, L3z, LEx, LEz) # Get transformation matrix form base to end effector
 sp.pprint(DIRECT_MAT) # Display transformation matrix form base to end effector
 
-xDesired = 10 # Desired x coordinate
-yDesired = 10 # Desired y coordinate
-LM1M3 = 190 # x-component of distance between motor 1 and motor 3
-LM3EE = 189 # x-component of distance between motor 3 and end effector
-phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, xDesired, yDesired) # Get angles for motor 1 and motor 3 based on desired x, y destination
-sp.pprint(phiD) # Display angle for motor 1
-sp.pprint(thetaD) # Display angle for motor 2
+xDesired = mm2m(10) # Desired x coordinate
+yDesired = mm2m(10) # Desired y coordinate
+LM1M3 = mm2m(190) # x-component of distance between motor 1 and motor 3
+LM3EE = mm2m(189) # x-component of distance between motor 3 and end effector
 
-phiD, alphaD, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
+# Working area limits
+xLowerWS = mm2m(-25.487)
+xUpperWS = mm2m(324.513)
+xLowerB = mm2m(25.487)
+xUpperB = mm2m(124.513)
+yLowerWS = mm2m(-175)
+yUpperWS = mm2m(175)
+yLowerB = mm2m(-75)
+yUpperB = mm2m(75)
+
+if (xLowerWS <= xDesired <= xUpperWS) and (yLowerWS <= yDesired <= yUpperWS):
+    print("Inside work area")
+
+    if (xLowerB <= xDesired <= xUpperB) and (yLowerB <= yDesired <= yUpperB):
+        print("Unacessible area")
+
+    else:
+        print("Bingo")
+
+        phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, xDesired, yDesired) # Get angles for motor 1 and motor 3 based on desired x, y destination
+        sp.pprint(phiD) # Display angle for motor 1
+        sp.pprint(thetaD) # Display angle for motor 2
+
+else:
+    print("Outside working area")
+
+#phiD, alphaD, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
+
+
+class prarobClientNode(Node):
+    def __init__(self):
+        super().__init__('prarob_client_node')
+
+        # Define publisher
+        self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
+
+        # TEST single point
+        print("move1 begin")
+        print(self.move_robot([phiD, 0, thetaD]))
+        print("move1 end")
+        self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move2 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move2 end")
+        # self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move3 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move3 end")
+        # print("move4 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move4 end")
+        # self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move5 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move5 end")
+        # self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move6 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move6 end")
+
+
+    def move_robot(self, q):
+
+        goal_trajectory = JointTrajectory()
+        goal_trajectory.joint_names.append('Brot')
+        goal_trajectory.joint_names.append('pitch')
+        goal_trajectory.joint_names.append('EErot')
+
+        goal_point = JointTrajectoryPoint()
+        goal_point.positions.append(q[0])
+        goal_point.positions.append(q[1])
+        goal_point.positions.append(q[2])
+        goal_point.time_from_start = Duration(seconds=5).to_msg()
+
+        goal_trajectory.points.append(goal_point)
+
+        return self.robot_goal_publisher_.publish(goal_trajectory)
+
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = prarobClientNode()
+    rclpy.spin(node)
+    rclpy.shutdown()
+
+if __name__=='__main__':
+    main()
