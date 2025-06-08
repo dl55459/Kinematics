@@ -18,7 +18,6 @@ from std_msgs.msg import Bool
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Point
-from my_robot_msgs.msg import JointAngles
 
     # xi(xi-1)
     # yi(yi-1)
@@ -152,9 +151,9 @@ def activePos(flag):
 
 # When sending commands to Brot joint:
 def BrotOffset(thetaD):
-
-    offset = math.pi
-    return (thetaD + offset) % (2 * math.pi)
+    # Convert desired angle to motor command with 180° offset
+    motor_zero = 180  # Physical 0° is at motor's 180°
+    return (thetaD + motor_zero) % 360
 
 # Distances for calculation
 L1z = mm2m(41.9) # z-component of distance between base and motor 1
@@ -195,11 +194,11 @@ class prarobClientNode(Node):
         super().__init__('prarob_client_node')
 
         # Define publishers and subscribers
-        self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
-        self.ready_pub = self.create_publisher(Bool, '/pathfinder/ready', 10)
-        self.auto_sub = self.create_subscription(Path, '/pathfinder/path', self.autoMove, 10)
-        self.manualAngles_sub = self.create_subscription(JointAngles, '/manual_angles', self.manualMoveAngles, 10)
-        self.manualPoints_sub = self.create_subscription(Point, '/manual/xy', self.manualMovePoints, 10)
+        self.self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
+        self.ready_pub = self.create_publisher(Bool, '/kinematics/ready', 10)
+        self.auto_sub = self.create_listener(Path, '/pathfinder/path', self.autoMove, 10)
+        self.manual_sub = self.create_listener(Point, '/GUI/manualAngles', self.manualMoveAngles, 10)
+        self.manual_sub = self.create_listener(Point, '/GUI/manualPoint', self.manualMovePoints, 10)
 # -----------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------
     def autoMove(self, data):
@@ -243,9 +242,9 @@ class prarobClientNode(Node):
 
         try:
             # Get phi, alpha, theta angles
-            phi = float(data.phi)
-            alpha = float(data.alpha)
-            theta = float(data.theta)
+            phi = float(data.phi) if hasattr(data, 'phi') else float(data.phi)
+            alpha = float(data.alpha) if hasattr(data, 'alpha') else float(data.alpha)
+            theta = float(data.theta) if hasattr(data, 'theta') else float(data.theta)
 
             # Convert to rad
             phi_rad = DEG2RAD(phi)
@@ -262,8 +261,8 @@ class prarobClientNode(Node):
 
         try:
             # Get x, y coordinates
-            x = float(data.x)
-            y = float(data.y)
+            x = float(data.x) if hasattr(data, 'x') else float(data.x)
+            y = float(data.y) if hasattr(data, 'y') else float(data.y)
             # Set motora angles according to coordinates
             Brot, EErot = inverse(LM1M3, LM3EE, x, y)
             _, Pitch, _ = activePos(False)
@@ -290,8 +289,6 @@ class prarobClientNode(Node):
         goal_trajectory.points.append(goal_point)
 
         return self.robot_goal_publisher_.publish(goal_trajectory)
-# -----------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------
 
 def main(args=None):
     rclpy.init(args=args)

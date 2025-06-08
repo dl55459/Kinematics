@@ -290,8 +290,6 @@ class prarobClientNode(Node):
         goal_trajectory.points.append(goal_point)
 
         return self.robot_goal_publisher_.publish(goal_trajectory)
-# -----------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------
 
 def main(args=None):
     rclpy.init(args=args)

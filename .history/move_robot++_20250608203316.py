@@ -14,11 +14,6 @@ from math import atan2, cos, sin, pi
 
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from std_msgs.msg import Bool
-from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import Point
-from my_robot_msgs.msg import JointAngles
 
     # xi(xi-1)
     # yi(yi-1)
@@ -44,8 +39,22 @@ from my_robot_msgs.msg import JointAngles
 ^                                        8888Y"  88 88  Yb 888888  YboodP   88
 """
 # Function for calculating transformation matrix from base to end effector
-def direct(L1z, L3x, L3z, LEx, LEz):
+def direct(LBx, LBy, L1z, L3x, L3z, LEx, LEz):
     phi, theta = sp.symbols("phi theta", real = True) # Angles
+
+    # Translation matrix from R frame to base
+    RB_T = sp.Matrix([
+        [LBx],
+        [LBy],
+        [0]
+    ])
+
+    # Rotation matrix from R frame to base
+    RB_R = sp.Matrix([
+        [-1,  0, 0],
+        [ 0, -1, 0],
+        [ 0,  0, 1]
+    ])
 
     # Translation matrix from base to motor 1
     BM1_T = sp.Matrix([
@@ -95,6 +104,8 @@ def direct(L1z, L3x, L3z, LEx, LEz):
     ])
 
     # Create the transformation matrices for each segment
+    TR = RB_R.row_join(RB_T)
+    T_RB = TR.col_join(Expanded)
     TR = BM1_R.row_join(BM1_T)
     T_BM1 = TR.col_join(Expanded)
     TR = M1M3_R.row_join(M1M3_T)
@@ -103,10 +114,10 @@ def direct(L1z, L3x, L3z, LEx, LEz):
     T_M3EE = TR.col_join(Expanded)
 
     # Combine the transformation matrices to get the full transformation from base to end effector
-    T_BEE = T_BM1 * T_M1M3 * T_M3EE # Calculate transformation matrix from base to end effector
+    T_REE = T_RB * T_BM1 * T_M1M3 * T_M3EE # Calculate transformation matrix from base to end effector
     # T_BEE_subs = T_BEE.subs(subsL) # Substitute link lengths
 
-    return T_BEE
+    return T_REE
 
 """
 ^                                        88 88b 88 Yb    dP 888888 88""Yb .dP"Y8 888888
@@ -114,16 +125,10 @@ def direct(L1z, L3x, L3z, LEx, LEz):
 ^                                        88 88 Y88   YbdP   88""   88"Yb  o.`Y8b 88""
 ^                                        88 88  Y8    YP    888888 88  Yb 8bodP' 888888
 """
-def inverse(LM1M3, LM3EE, xDesired, yDesired):
+def inverse(T_REE, LM1M3, LM3EE, xDesired, yDesired):
 
-    r_sqr = xDesired**2 + yDesired**2
-    cos_theta = (LM1M3**2 + LM3EE**2 - r_sqr) / (2 * LM1M3 * LM3EE)
-    thetaDesired = sp.acos(cos_theta)
+    transMat =
 
-    beta  = math.atan2(yDesired, xDesired)
-    gamma = math.atan2(LM3EE * sp.sin(thetaDesired),
-                       LM1M3 + LM3EE * sp.cos(thetaDesired))
-    phiDesired = beta - gamma
     return phiDesired, thetaDesired
 
 def DEG2RAD(degree):
@@ -145,18 +150,19 @@ def activePos(flag):
         thetaActive = DEG2RAD(0)
     else:
         phiActive = DEG2RAD(180) # Idle angle for motor 1
-        alphaActive = DEG2RAD(-90) # Idle angle for motor 2
-        thetaActive = DEG2RAD(165) # Idle angle for motor 3
+        alphaActive = DEG2RAD(270) # Idle angle for motor 2
+        thetaActive = DEG2RAD(195) # Idle angle for motor 3
 
     return phiActive, alphaActive, thetaActive
 
 # When sending commands to Brot joint:
 def BrotOffset(thetaD):
+    # Convert desired angle to motor command with 180° offset
+    motor_zero = 180  # Physical 0° is at motor's 180°
+    return (thetaD + motor_zero) % 360
 
-    offset = math.pi
-    return (thetaD + offset) % (2 * math.pi)
-
-# Distances for calculation
+LBx = mm2m(124.5) # x-component of distance from R frame to base
+LBy = mm2m(75) # y-component of distance from R frame to base
 L1z = mm2m(41.9) # z-component of distance between base and motor 1
 L3x = mm2m(190) # x-component of distance between motor 1 and motor 3
 L3z = mm2m(-0.55) # z-component of distance between motor 1 and motor 3
@@ -178,120 +184,68 @@ yUpperWS = mm2m(350) # 175)
 yLowerB = mm2m(200) # -75)
 yUpperB = mm2m(350) # 75)
 
-def R2B(xR, yR):
-
-    xB = -xR + 324.513
-    yB = -yR + 175
-    return xB, yB
-
-# Global variables
-finishedFlag = False
-Brot = 0
-Pitch = 0
-EErot = 0
-
 class prarobClientNode(Node):
     def __init__(self):
         super().__init__('prarob_client_node')
 
-        # Define publishers and subscribers
+        # Define publisher
         self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
-        self.ready_pub = self.create_publisher(Bool, '/pathfinder/ready', 10)
-        self.auto_sub = self.create_subscription(Path, '/pathfinder/path', self.autoMove, 10)
-        self.manualAngles_sub = self.create_subscription(JointAngles, '/manual_angles', self.manualMoveAngles, 10)
-        self.manualPoints_sub = self.create_subscription(Point, '/manual/xy', self.manualMovePoints, 10)
+        self.
 # -----------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------
-    def autoMove(self, data):
+        DIRECT_MAT = direct(LBx, LBy, L1z, L3x, L3z, LEx, LEz) # Get transformation matrix form base to end effector
+        sp.pprint(DIRECT_MAT) # Display transformation matrix form base to end effector
 
-        self.ready_pub.publish(Bool(data = False))
+        phiD, alphaD, thetaD = activePos(False) # Set arm to idle position (All positions taken to account)
+        self.move_robot([phiD, 0, thetaD], durationS=5)
+        self.get_clock().sleep_for(Duration(seconds=6.0))
 
-        Brot, Pitch, EErot = activePos(False) # Set arm to idle position (All positions taken to account)
-        self.move_robot([Brot, Pitch, EErot], durationS = 1.5)
+        path = mm2m(np.array([[200, 100], [200, -100], [100, -100], [100, -150]])) # TODO: take values from topic
 
-        for i, coordinate in enumerate(data.poses):
+        newPath = True # TODO:Terminal GUI
 
-            x = coordinate.pose.position.x
-            y = coordinate.pose.position.y
-            self.get_logger().info(f"Processing waypoint at x: {x:.3f}, y: {y:.3f}")
+        Brot, Pitch, EErot = activePos(False)
+        self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
 
-            if (xLowerWS <= x <= xUpperWS) and (yLowerWS <= y <= yUpperWS):
-                self.get_logger().info(f"Work area")
+        if newPath == True:
+            for i in path:
+                if (xLowerWS <= path[i, 1] <= xUpperWS) and (yLowerWS <= path[i, 2] <= yUpperWS):
+                    print("Inside work area")
+                    if (xLowerB <= path[i, 1] <= xUpperB) and (yLowerB <= path[i, 2] <= yUpperB):
+                        print("Unacessible area")
+                    else:
 
-                if (xLowerB <= x <= xUpperB) and (yLowerB <= y <= yUpperB):
-                    self.get_logger().info("Inaccessible area")
+
+                        print("Accessible area")
+                        Brot, EErot = inverse(DIRECT_MAT, LM1M3, LM3EE, path[i, 1], path[i, 2])
+                        self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
+                        #self.get_clock().sleep_for(Duration(seconds = 6.0))
+                        if i == 1:
+                            phiD, Pitch, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
+                            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
+                            #self.get_clock().sleep_for(Duration(seconds = 6.0))
 
                 else:
-                    x, y = R2B(x, y)
-
-                    Brot, EErot = inverse(LM1M3, LM3EE, x, y)
-                    self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-
-                    if i == 1: # After first coordinate loaded set arm to active position
-                        _, Pitch, _ = activePos(True)
-                        self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-            else:
-                self.get_logger().info("Outside of work area")
-
-        Brot, Pitch, EErot = activePos(False) # Set arm to idle position (All positions taken to account)
-        self.move_robot([Brot, Pitch, EErot], durationS = 3)
-
-        self.ready_pub.publish(Bool(data = True))
-        self.get_logger().info("Path execution completed")
-
-    def manualMoveAngles(self, data):
-
-        try:
-            # Get phi, alpha, theta angles
-            phi = float(data.phi)
-            alpha = float(data.alpha)
-            theta = float(data.theta)
-
-            # Convert to rad
-            phi_rad = DEG2RAD(phi)
-            alpha_rad = DEG2RAD(alpha)
-            theta_rad = DEG2RAD(theta)
-
-            # Move robot
-            self.move_robot([phi_rad, alpha_rad, BrotOffset(theta_rad)], durationS = 1.5)
-
-        except Exception as e:
-            self.get_logger().error(f"Error processing manual move: {str(e)}")
-
-    def manualMovePoints(self, data):
-
-        try:
-            # Get x, y coordinates
-            x = float(data.x)
-            y = float(data.y)
-            # Set motora angles according to coordinates
-            Brot, EErot = inverse(LM1M3, LM3EE, x, y)
-            _, Pitch, _ = activePos(False)
-            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-            _, Pitch, _ = activePos(True)
-            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-
-        except Exception as e:
-            self.get_logger().error(f"Error processing manual move: {str(e)}")
+                    print("Outside working area")
+        newPath = False
+# -----------------------------------------------------------------------------------------------------------------------------
+# -----------------------------------------------------------------------------------------------------------------------------
 
     def move_robot(self, q, durationS):
 
         goal_trajectory = JointTrajectory()
-        goal_trajectory.joint_names.append('joint1')
-        goal_trajectory.joint_names.append('joint2')
-        goal_trajectory.joint_names.append('joint3')
+        goal_trajectory.joint_names.append('Brot')
+        goal_trajectory.joint_names.append('pitch')
+        goal_trajectory.joint_names.append('EErot')
 
         goal_point = JointTrajectoryPoint()
-        goal_point.positions.append(q[0])
-        goal_point.positions.append(q[1])
-        goal_point.positions.append(q[2])
+        goal_point.positions.append(q)
         goal_point.time_from_start = Duration(durationS).to_msg()
 
         goal_trajectory.points.append(goal_point)
 
         return self.robot_goal_publisher_.publish(goal_trajectory)
-# -----------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------
+
 
 def main(args=None):
     rclpy.init(args=args)

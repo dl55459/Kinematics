@@ -14,11 +14,6 @@ from math import atan2, cos, sin, pi
 
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from std_msgs.msg import Bool
-from nav_msgs.msg import Path
-from geometry_msgs.msg import PoseStamped
-from geometry_msgs.msg import Point
-from my_robot_msgs.msg import JointAngles
 
     # xi(xi-1)
     # yi(yi-1)
@@ -152,11 +147,10 @@ def activePos(flag):
 
 # When sending commands to Brot joint:
 def BrotOffset(thetaD):
+    # Convert desired angle to motor command with 180° offset
+    motor_zero = 180  # Physical 0° is at motor's 180°
+    return (thetaD + motor_zero) % 360
 
-    offset = math.pi
-    return (thetaD + offset) % (2 * math.pi)
-
-# Distances for calculation
 L1z = mm2m(41.9) # z-component of distance between base and motor 1
 L3x = mm2m(190) # x-component of distance between motor 1 and motor 3
 L3z = mm2m(-0.55) # z-component of distance between motor 1 and motor 3
@@ -184,114 +178,61 @@ def R2B(xR, yR):
     yB = -yR + 175
     return xB, yB
 
-# Global variables
-finishedFlag = False
-Brot = 0
-Pitch = 0
-EErot = 0
 
 class prarobClientNode(Node):
     def __init__(self):
         super().__init__('prarob_client_node')
 
         # Define publishers and subscribers
-        self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
-        self.ready_pub = self.create_publisher(Bool, '/pathfinder/ready', 10)
-        self.auto_sub = self.create_subscription(Path, '/pathfinder/path', self.autoMove, 10)
-        self.manualAngles_sub = self.create_subscription(JointAngles, '/manual_angles', self.manualMoveAngles, 10)
-        self.manualPoints_sub = self.create_subscription(Point, '/manual/xy', self.manualMovePoints, 10)
+        self.moveJoints_sub = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory',
+        10)
+        self.path_sub = self.create_listener(Path, '/pathfinder/path', self.autoMove, 10)
 # -----------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------
-    def autoMove(self, data):
+    def autoMove(self):
 
-        self.ready_pub.publish(Bool(data = False))
+        phiD, alphaD, thetaD = activePos(False) # Set arm to idle position (All positions taken to account)
+        self.move_robot([phiD, alphaD, thetaD], durationS = 1.5)
 
-        Brot, Pitch, EErot = activePos(False) # Set arm to idle position (All positions taken to account)
-        self.move_robot([Brot, Pitch, EErot], durationS = 1.5)
+        newPath = True # TODO:Terminal GUI
 
-        for i, coordinate in enumerate(data.poses):
-
-            x = coordinate.pose.position.x
-            y = coordinate.pose.position.y
-            self.get_logger().info(f"Processing waypoint at x: {x:.3f}, y: {y:.3f}")
-
-            if (xLowerWS <= x <= xUpperWS) and (yLowerWS <= y <= yUpperWS):
-                self.get_logger().info(f"Work area")
-
-                if (xLowerB <= x <= xUpperB) and (yLowerB <= y <= yUpperB):
-                    self.get_logger().info("Inaccessible area")
-
+        Brot, Pitch, EErot = activePos(False)
+        self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
+        for i in Path:
+            if (xLowerWS <= Path.x <= xUpperWS) and (yLowerWS <= Path.y <= yUpperWS):
+                print("Inside work area")
+                if (xLowerB <= Path.x <= xUpperB) and (yLowerB <= Path.y <= yUpperB):
+                    print("Unacessible area")
                 else:
-                    x, y = R2B(x, y)
-
-                    Brot, EErot = inverse(LM1M3, LM3EE, x, y)
+                    print("Accessible area")
+                    Brot, EErot = inverse(LM1M3, LM3EE, R2B(Path.x), R2B(Path.y))
                     self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-
-                    if i == 1: # After first coordinate loaded set arm to active position
-                        _, Pitch, _ = activePos(True)
+                    #self.get_clock().sleep_for(Duration(seconds = 6.0))
+                    if i == 1:
+                        phiD, Pitch, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
                         self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
+                        #self.get_clock().sleep_for(Duration(seconds = 6.0))
             else:
-                self.get_logger().info("Outside of work area")
-
-        Brot, Pitch, EErot = activePos(False) # Set arm to idle position (All positions taken to account)
-        self.move_robot([Brot, Pitch, EErot], durationS = 3)
-
-        self.ready_pub.publish(Bool(data = True))
-        self.get_logger().info("Path execution completed")
-
-    def manualMoveAngles(self, data):
-
-        try:
-            # Get phi, alpha, theta angles
-            phi = float(data.phi)
-            alpha = float(data.alpha)
-            theta = float(data.theta)
-
-            # Convert to rad
-            phi_rad = DEG2RAD(phi)
-            alpha_rad = DEG2RAD(alpha)
-            theta_rad = DEG2RAD(theta)
-
-            # Move robot
-            self.move_robot([phi_rad, alpha_rad, BrotOffset(theta_rad)], durationS = 1.5)
-
-        except Exception as e:
-            self.get_logger().error(f"Error processing manual move: {str(e)}")
-
-    def manualMovePoints(self, data):
-
-        try:
-            # Get x, y coordinates
-            x = float(data.x)
-            y = float(data.y)
-            # Set motora angles according to coordinates
-            Brot, EErot = inverse(LM1M3, LM3EE, x, y)
-            _, Pitch, _ = activePos(False)
-            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-            _, Pitch, _ = activePos(True)
-            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-
-        except Exception as e:
-            self.get_logger().error(f"Error processing manual move: {str(e)}")
+                print("Outside working area")
 
     def move_robot(self, q, durationS):
 
         goal_trajectory = JointTrajectory()
-        goal_trajectory.joint_names.append('joint1')
-        goal_trajectory.joint_names.append('joint2')
-        goal_trajectory.joint_names.append('joint3')
+        goal_trajectory.joint_names.append('Brot')
+        goal_trajectory.joint_names.append('pitch')
+        goal_trajectory.joint_names.append('EErot')
 
         goal_point = JointTrajectoryPoint()
-        goal_point.positions.append(q[0])
-        goal_point.positions.append(q[1])
-        goal_point.positions.append(q[2])
+        goal_point.positions.append(q)
         goal_point.time_from_start = Duration(durationS).to_msg()
 
         goal_trajectory.points.append(goal_point)
 
         return self.robot_goal_publisher_.publish(goal_trajectory)
-# -----------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------
+
+    def callback(mess):
+        x = mess.x
+
 
 def main(args=None):
     rclpy.init(args=args)

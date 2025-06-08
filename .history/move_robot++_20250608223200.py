@@ -153,8 +153,8 @@ def activePos(flag):
 # When sending commands to Brot joint:
 def BrotOffset(thetaD):
 
-    offset = math.pi
-    return (thetaD + offset) % (2 * math.pi)
+    motor_zero_offset = math.pi
+    return (thetaD + motor_zero_offset) % (2 * math.pi)
 
 # Distances for calculation
 L1z = mm2m(41.9) # z-component of distance between base and motor 1
@@ -290,8 +290,6 @@ class prarobClientNode(Node):
         goal_trajectory.points.append(goal_point)
 
         return self.robot_goal_publisher_.publish(goal_trajectory)
-# -----------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------
 
 def main(args=None):
     rclpy.init(args=args)

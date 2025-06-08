@@ -18,7 +18,6 @@ from std_msgs.msg import Bool
 from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped
 from geometry_msgs.msg import Point
-from my_robot_msgs.msg import JointAngles
 
     # xi(xi-1)
     # yi(yi-1)
@@ -152,11 +151,10 @@ def activePos(flag):
 
 # When sending commands to Brot joint:
 def BrotOffset(thetaD):
+    # Convert desired angle to motor command with 180° offset
+    motor_zero = 180  # Physical 0° is at motor's 180°
+    return (thetaD + motor_zero) % 360
 
-    offset = math.pi
-    return (thetaD + offset) % (2 * math.pi)
-
-# Distances for calculation
 L1z = mm2m(41.9) # z-component of distance between base and motor 1
 L3x = mm2m(190) # x-component of distance between motor 1 and motor 3
 L3z = mm2m(-0.55) # z-component of distance between motor 1 and motor 3
@@ -195,11 +193,11 @@ class prarobClientNode(Node):
         super().__init__('prarob_client_node')
 
         # Define publishers and subscribers
-        self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
-        self.ready_pub = self.create_publisher(Bool, '/pathfinder/ready', 10)
-        self.auto_sub = self.create_subscription(Path, '/pathfinder/path', self.autoMove, 10)
-        self.manualAngles_sub = self.create_subscription(JointAngles, '/manual_angles', self.manualMoveAngles, 10)
-        self.manualPoints_sub = self.create_subscription(Point, '/manual/xy', self.manualMovePoints, 10)
+        self.motorAngle_pub = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
+        self.ready_pub = self.create_publisher(Bool, '/kinematics/ready', 10)
+        self.auto_sub = self.create_listener(Path, '/pathfinder/path', self.autoMove, 10)
+        self.manual_sub = self.create_listener(Point, '/GUI/manualAngles', self.manualMoveAngles, 10)
+        self.manual_sub = self.create_listener(Point, '/GUI/manualPoint', self.manualMovePoints, 10)
 # -----------------------------------------------------------------------------------------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------------------
     def autoMove(self, data):
@@ -242,18 +240,18 @@ class prarobClientNode(Node):
     def manualMoveAngles(self, data):
 
         try:
-            # Get phi, alpha, theta angles
-            phi = float(data.phi)
-            alpha = float(data.alpha)
-            theta = float(data.theta)
+            # Get angles from message
+            phi = float(data.phi) if hasattr(data, 'phi') else float(data.x)
+            alpha = float(data.alpha) if hasattr(data, 'alpha') else float(data.y)
+            theta = float(data.theta) if hasattr(data, 'theta') else float(data.z)
 
-            # Convert to rad
+            # Convert to radians if needed
             phi_rad = DEG2RAD(phi)
             alpha_rad = DEG2RAD(alpha)
             theta_rad = DEG2RAD(theta)
 
             # Move robot
-            self.move_robot([phi_rad, alpha_rad, BrotOffset(theta_rad)], durationS = 1.5)
+            self.move_robot([phi_rad, alpha_rad, BrotOffset(theta_rad)], durationS=1.0)
 
         except Exception as e:
             self.get_logger().error(f"Error processing manual move: {str(e)}")
@@ -261,15 +259,14 @@ class prarobClientNode(Node):
     def manualMovePoints(self, data):
 
         try:
-            # Get x, y coordinates
-            x = float(data.x)
-            y = float(data.y)
-            # Set motora angles according to coordinates
-            Brot, EErot = inverse(LM1M3, LM3EE, x, y)
-            _, Pitch, _ = activePos(False)
-            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-            _, Pitch, _ = activePos(True)
-            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
+            # Get angles from message
+            x = float(data.x) if hasattr(data, 'phi') else float(data.x)
+            y = float(data.y) if hasattr(data, 'alpha') else float(data.y)
+
+            phi, alpha, theta = inverse(LM1M3, LM3EE, x, y)
+
+            # Move robot
+            self.move_robot([phi_rad, alpha_rad, BrotOffset(theta_rad)], durationS=1.0)
 
         except Exception as e:
             self.get_logger().error(f"Error processing manual move: {str(e)}")
@@ -290,8 +287,6 @@ class prarobClientNode(Node):
         goal_trajectory.points.append(goal_point)
 
         return self.robot_goal_publisher_.publish(goal_trajectory)
-# -----------------------------------------------------------------------------------------------------------------------------
-# -----------------------------------------------------------------------------------------------------------------------------
 
 def main(args=None):
     rclpy.init(args=args)
