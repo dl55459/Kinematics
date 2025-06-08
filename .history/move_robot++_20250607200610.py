@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 
 import rclpy
+from rclpy.action import ActionClient
 from rclpy.node import Node
 from rclpy.duration import Duration
+import time
 import numpy as np
 import sympy as sp
-import math
+import math as math
 from math import atan2, cos, sin, pi
 
+from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from std_msgs.msg import Float64MultiArray  # For receiving path arrays
 
     # xi(xi-1)
     # yi(yi-1)
@@ -176,113 +178,111 @@ def topicIn():
 
     return 0
 
-L1z = mm2m(41.9) # z-component of distance between base and motor 1
-L3x = mm2m(190) # x-component of distance between motor 1 and motor 3
-L3z = mm2m(-0.55) # z-component of distance between motor 1 and motor 3
-LEx = mm2m(189) # x-component of distance between motor 3 and end effector
-LEz = mm2m(39.35) # z-component of distance between motor 3 and end effector
-
-LM1M3 = mm2m(190) # x-component of distance between motor 1 and motor 3
-LM3EE = mm2m(189) # x-component of distance between motor 3 and end effector
-
-# Working area limits
-xLowerWS = mm2m(-25.487)
-xUpperWS = mm2m(324.513)
-xLowerB = mm2m(25.487)
-xUpperB = mm2m(124.513)
-yLowerWS = mm2m(-175)
-yUpperWS = mm2m(175)
-yLowerB = mm2m(-75)
-yUpperB = mm2m(75)
-
 class prarobClientNode(Node):
     def __init__(self):
         super().__init__('prarob_client_node')
 
         # Define publisher
-        self.robot_goal_publisher_ = self.create_publisher(
-            JointTrajectory,
-            '/joint_trajectory_controller/joint_trajectory',
-            10
-        )
+        self.robot_goal_publisher_ = self.create_publisher(JointTrajectory, '/joint_trajectory_controller/joint_trajectory', 10)
 
-        # Define subscriber for path updates
-        self.path_subscriber = self.create_subscription(
-            Float64MultiArray,
-            '/path_coordinates',  # Topic name for receiving paths
-            self.path_callback,
-            10
-        )
-        self.get_logger().info("Waiting for path coordinates on /path_coordinates topic...")
 
-        # Initialize variables
-        self.current_path = None
-        self.DIRECT_MAT = direct(L1z, L3x, L3z, LEx, LEz)
-        self.phiD, self.alphaD, self.thetaD = activePos(False)  # Start in idle position
+        # Main section of the code
+    phiD, alphaD, thetaD = activePos(False) # Set arm to idle position (All positions taken to account)
 
-    def path_callback(self, msg):
-        """Callback for receiving new path coordinates"""
-        try:
-            # Convert Float64MultiArray to numpy array and reshape
-            raw_data = np.array(msg.data)
-            self.current_path = raw_data.reshape(-1, 2)  # Reshape to Nx2 array
-            self.get_logger().info(f"Received new path: {self.current_path}")
+    L1z = mm2m(41.9) # z-component of distance between base and motor 1
+    L3x = mm2m(190) # x-component of distance between motor 1 and motor 3
+    L3z = mm2m(-0.55) # z-component of distance between motor 1 and motor 3
+    LEx = mm2m(189) # x-component of distance between motor 3 and end effector
+    LEz = mm2m(39.35) # z-component of distance between motor 3 and end effector
+    DIRECT_MAT = direct(L1z, L3x, L3z, LEx, LEz) # Get transformation matrix form base to end effector
+    sp.pprint(DIRECT_MAT) # Display transformation matrix form base to end effector
 
-            # Convert from mm to meters
-            self.current_path = mm2m(self.current_path)
+    xDesired = mm2m(10) # Desired x coordinate
+    yDesired = mm2m(10) # Desired y coordinate
+    LM1M3 = mm2m(190) # x-component of distance between motor 1 and motor 3
+    LM3EE = mm2m(189) # x-component of distance between motor 3 and end effector
 
-            # Execute the new path
-            self.execute_path()
+    # Working area limits
+    xLowerWS = mm2m(-25.487)
+    xUpperWS = mm2m(324.513)
+    xLowerB = mm2m(25.487)
+    xUpperB = mm2m(124.513)
+    yLowerWS = mm2m(-175)
+    yUpperWS = mm2m(175)
+    yLowerB = mm2m(-75)
+    yUpperB = mm2m(75)
 
-        except Exception as e:
-            self.get_logger().error(f"Error processing path: {str(e)}")
+    array = np.array([[1, 2],[3, 4],[5, 6],[7, 8]]) # TODO: take values from topic
 
-    def execute_path(self):
-        """Execute the current path"""
-        if self.current_path is None:
-            self.get_logger().warn("No path available to execute")
-            return
+    for i in array:
+        if (xLowerWS <= xDesired <= xUpperWS) and (yLowerWS <= yDesired <= yUpperWS):
+            print("Inside work area")
 
-        for point in self.current_path:
-            x, y = point[0], point[1]
+            if (xLowerB <= xDesired <= xUpperB) and (yLowerB <= yDesired <= yUpperB):
+                print("Unacessible area")
 
-            # Workspace checking
-            if not (xLowerWS <= x <= xUpperWS) or not (yLowerWS <= y <= yUpperWS):
-                self.get_logger().warn(f"Point {x, y} outside workspace - skipping")
-                continue
+            else:
+                print("Bingo")
 
-            if (xLowerB <= x <= xUpperB) and (yLowerB <= y <= yUpperB):
-                self.get_logger().warn(f"Point {x, y} in inaccessible area - skipping")
-                continue
+                # phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, xDesired, yDesired) # Get angles for motor 1 and motor 3 based on desired x, y destination
+                phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, array[i, 1], array[i, 2])
+                move_robot([phiD, 0, thetaD])
+                sp.pprint(phiD) # Display angle for motor 1
+                sp.pprint(thetaD) # Display angle for motor 2
 
-            # Calculate and execute movement
-            phiD, thetaD = inverse(self.DIRECT_MAT, LM1M3, LM3EE, x, y)
-            self.move_robot([phiD, 0, thetaD], 5)
+        else:
+            print("Outside working area")
 
-            # Log the angles
-            self.get_logger().info(f"Moving to {x, y} with angles: phi={phiD:.2f}, theta={thetaD:.2f}")
+    #phiD, alphaD, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
 
-            # Wait for movement to complete (6 seconds as in your original code)
-            self.get_clock().sleep_for(Duration(seconds=6.0))
+        # TEST single point
+        # print("move1 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move1 end")
+        # self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move2 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move2 end")
+        # self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move3 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move3 end")
+        # print("move4 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move4 end")
+        # self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move5 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move5 end")
+        # self.get_clock().sleep_for(Duration(seconds=6.0))
+        # print("move6 begin")
+        # print(self.move_robot([phiD, 0, thetaD]))
+        # print("move6 end")
 
-    def move_robot(self, q, durationS):
-        """Publish joint trajectory (same as your original)"""
+
+    def move_robot(self, q):
+
         goal_trajectory = JointTrajectory()
-        goal_trajectory.joint_names = ['Brot', 'pitch', 'EErot']
+        goal_trajectory.joint_names.append('Brot')
+        goal_trajectory.joint_names.append('pitch')
+        goal_trajectory.joint_names.append('EErot')
 
         goal_point = JointTrajectoryPoint()
-        goal_point.positions = q
-        goal_point.time_from_start = Duration(durationS).to_msg()
+        goal_point.positions.append(q[0])
+        goal_point.positions.append(q[1])
+        goal_point.positions.append(q[2])
+        goal_point.time_from_start = Duration(seconds=5).to_msg()
 
         goal_trajectory.points.append(goal_point)
-        self.robot_goal_publisher_.publish(goal_trajectory)
+
+        return self.robot_goal_publisher_.publish(goal_trajectory)
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = prarobClientNode()
     rclpy.spin(node)
-    node.destroy_node()
     rclpy.shutdown()
 
-if __name__ == '__main__':
+if __name__=='__main__':
     main()

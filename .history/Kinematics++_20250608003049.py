@@ -1,5 +1,4 @@
 import sympy as sp
-import numpy as np
 import math as math
 from math import atan2, cos, sin, pi
 
@@ -144,8 +143,6 @@ def activePos(flag):
 
     return phiActive, alphaActive, thetaActive
 
-
-
 # Joint limits in radians
 THETA_MIN = math.radians(160)
 THETA_MAX = math.radians(195)
@@ -210,9 +207,6 @@ def move_robot_with_limits(self, x, y):
     except ValueError as e:
         self.get_logger().error(str(e))
         return False
-
-
-
 
 # Main section of the code
 phiD, alphaD, thetaD = activePos(False) # Set arm to idle position (All positions taken to account)

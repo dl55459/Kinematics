@@ -127,7 +127,7 @@ def direct(LBx, LBy, L1z, L3x, L3z, LEx, LEz):
 """
 def inverse(T_REE, LM1M3, LM3EE, xDesired, yDesired):
 
-    transMat =
+
 
     return phiDesired, thetaDesired
 

@@ -1,0 +1,178 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://ros.org/wiki/xacro">
+
+<xacro:macro name="prarob_manipulator" params="parent *origin">
+  <!-- Base to Link1 (Fixed) -->
+  <joint name="origin_to_link1" type="fixed">
+    <xacro:insert_block name="origin" />
+    <parent link="${parent}" />
+    <child link="link1" />
+    <origin xyz="0.0 0.0 0.0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Link 1 - Base -->
+  <link name="link1">
+    <visual>
+      <origin rpy="1.5708 0 -1.5708" xyz="0.0495 0 0"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/base.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin rpy="1.5708 0 -1.5708" xyz="0.0495 0 0"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/base.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Brot Fixed Adapter -->
+  <joint name="Brotfixed" type="fixed">
+    <parent link="link1"/>
+    <child link="link2"/>
+    <origin xyz="0.0 0.0 0.019" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Link 2 - Brot Servo -->
+  <link name="link2">
+    <visual>
+      <origin xyz="0 0 0" rpy="3.1416 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/XL-430_new.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="3.1416 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/XL-430_new.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+<!-- Base rotation Joint -->
+<joint name="Brot" type="revolute">
+  <parent link="link2"/>
+  <child link="link3"/>
+  <origin xyz="0.0 0.0 0.022" rpy="0 0 3.14159"/> <!-- 180° offset -->
+  <axis xyz="0 0 1"/>
+  <limit velocity="10.0" effort="1" lower="-2.87979" upper="2.87979"/> <!-- Rotation limits [-165°, 165°] -->
+  <calibration rising="3.14159"/> <!-- New zero at 180° -->
+  <safety_controller k_velocity="10" soft_lower_limit="-4.02124" soft_upper_limit="1.30899"/> <!-- (-165°+180°) to (165°+180°) -->
+</joint>
+
+  <!-- Link 3 - First Arm Segment -->
+  <link name="link3">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/link_90.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/link_90.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Pitch Fixed Adapter -->
+  <joint name="pitchfixed" type="fixed">
+    <parent link="link3"/>
+    <child link="link4"/>
+    <origin xyz="0.012 0.0 0.01725" rpy="1.5708 0 0"/>
+  </joint>
+
+  <!-- Link 4 - Pitch Servo -->
+  <link name="link4">
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/XL-430_new.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/XL-430_new.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- Pitch Joint -->
+  <joint name="pitch" type="revolute">
+    <parent link="link4"/>
+    <child link="link5"/>
+    <origin xyz="0.0 0.0 -0.028" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit velocity="10.0" effort="1" lower="0" upper="1.5708" /> <!-- 0° to 90° -->
+    <safety_controller k_velocity="10" soft_lower_limit="0.1" soft_upper_limit="1.5"/>
+  </joint>
+
+  <!-- Link 5 - Second Arm Segment -->
+  <link name="link5">
+    <visual>
+      <origin xyz="0.084 0 0" rpy="1.5708 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/link_rr.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.084 0 0" rpy="1.5708 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/link_rr.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- End Effector Fixed Adapter -->
+  <joint name="EErotfixed" type="fixed">
+    <parent link="link5"/>
+    <child link="link6"/>
+    <origin xyz="0.178 0 0.0279" rpy="1.5708 0 0"/>
+  </joint>
+
+  <!-- Link 6 - EErot Servo -->
+  <link name="link6">
+    <visual>
+      <origin xyz="0.0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/XL-430_new.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 -1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/XL-430_new.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+  <!-- End Effector rotation Joint-->
+  <joint name="EErot" type="revolute">
+    <parent link="link6"/>
+    <child link="link7"/>
+    <origin xyz="0.0 0.0 0.027" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit velocity="10.0" effort="1" lower="-6.28319" upper="6.28319" /> <!-- -360° to +360° -->
+    <safety_controller k_velocity="10" soft_lower_limit="-6.2" soft_upper_limit="6.2"/>
+  </joint>
+
+  <!-- Link 7 - End Effector -->
+  <link name="link7">
+    <visual>
+      <origin xyz="0.094 0 0" rpy="-1.5708 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/end_effector.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </visual>
+    <collision>
+      <origin xyz="0.094 0 0" rpy="-1.5708 0 1.5708"/>
+      <geometry>
+        <mesh filename="package://ros2_prarob/meshes/end_effector.dae" scale="0.001 0.001 0.001"/>
+      </geometry>
+    </collision>
+  </link>
+
+</xacro:macro>
+</robot>

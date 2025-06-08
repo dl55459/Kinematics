@@ -114,10 +114,10 @@ def direct(LBx, LBy, L1z, L3x, L3z, LEx, LEz):
     T_M3EE = TR.col_join(Expanded)
 
     # Combine the transformation matrices to get the full transformation from base to end effector
-    T_REE = T_RB * T_BM1 * T_M1M3 * T_M3EE # Calculate transformation matrix from base to end effector
+    T_BEE = T_RB * T_BM1 * T_M1M3 * T_M3EE # Calculate transformation matrix from base to end effector
     # T_BEE_subs = T_BEE.subs(subsL) # Substitute link lengths
 
-    return T_REE
+    return T_BEE
 
 """
 ^                                        88 88b 88 Yb    dP 888888 88""Yb .dP"Y8 888888
@@ -125,9 +125,36 @@ def direct(LBx, LBy, L1z, L3x, L3z, LEx, LEz):
 ^                                        88 88 Y88   YbdP   88""   88"Yb  o.`Y8b 88""
 ^                                        88 88  Y8    YP    888888 88  Yb 8bodP' 888888
 """
-def inverse(T_REE, LM1M3, LM3EE, xDesired, yDesired):
+def inverse(T_BEE, LM1M3, LM3EE, xDesired, yDesired):
+    # Extract x, y, z from T_BEE
+    # xd, yd = sp.symbols("xd yd", real = True) # Desired destination in x, y directions
+    #subsd = {xDesired:1, yDesired:1} # input desired x, y location
 
-    transMat =
+    # extract x, y, z components form T_BEE matrix
+    x, y, z = T_BEE[:3, 3]
+
+    # Set equations for x, y calculation
+    eqx = sp.Eq(x, xDesired)
+    eqy = sp.Eq(y, yDesired)
+
+    # Display results
+    sp.pprint(eqx)
+    sp.pprint(eqy)
+
+    # Calculate the distance form base to end effector
+    r_sqr = xDesired**2 + yDesired**2
+    # r = sp.sqrt(r_sqr)
+
+    # Calculate the angle theta which is the angle of second motor
+    cos_theta = (LM1M3**2 + LM3EE**2 - r_sqr) / (2 * LM1M3 * LM3EE)
+    thetaDesired = sp.acos(cos_theta) # Returns +-
+
+    # Calculate the angle phi which is the angle of first motor
+    LM1M3 = sp.Integer(LM1M3)  # Convert to sympy Integer for better precision
+    LM3EE = sp.Integer(LM3EE)  # Convert to sympy Integer for better precision
+    beta = math.atan2(yDesired, xDesired)
+    gamma = math.atan2(LM3EE * sp.sin(thetaDesired), LM1M3 + LM3EE * sp.cos(thetaDesired))
+    phiDesired = beta - gamma
 
     return phiDesired, thetaDesired
 

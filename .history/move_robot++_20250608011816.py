@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from asyncio import PidfdChildWatcher
 from matplotlib.transforms import LockableBbox
 import rclpy
 from rclpy.action import ActionClient
@@ -114,10 +113,10 @@ def direct(LBx, LBy, L1z, L3x, L3z, LEx, LEz):
     T_M3EE = TR.col_join(Expanded)
 
     # Combine the transformation matrices to get the full transformation from base to end effector
-    T_REE = T_RB * T_BM1 * T_M1M3 * T_M3EE # Calculate transformation matrix from base to end effector
+    T_BEE = T_RB * T_BM1 * T_M1M3 * T_M3EE # Calculate transformation matrix from base to end effector
     # T_BEE_subs = T_BEE.subs(subsL) # Substitute link lengths
 
-    return T_REE
+    return T_BEE
 
 """
 ^                                        88 88b 88 Yb    dP 888888 88""Yb .dP"Y8 888888
@@ -125,9 +124,36 @@ def direct(LBx, LBy, L1z, L3x, L3z, LEx, LEz):
 ^                                        88 88 Y88   YbdP   88""   88"Yb  o.`Y8b 88""
 ^                                        88 88  Y8    YP    888888 88  Yb 8bodP' 888888
 """
-def inverse(T_REE, LM1M3, LM3EE, xDesired, yDesired):
+def inverse(T_BEE, LM1M3, LM3EE, xDesired, yDesired):
+    # Extract x, y, z from T_BEE
+    # xd, yd = sp.symbols("xd yd", real = True) # Desired destination in x, y directions
+    #subsd = {xDesired:1, yDesired:1} # input desired x, y location
 
-    transMat =
+    # extract x, y, z components form T_BEE matrix
+    x, y, z = T_BEE[:3, 3]
+
+    # Set equations for x, y calculation
+    eqx = sp.Eq(x, xDesired)
+    eqy = sp.Eq(y, yDesired)
+
+    # Display results
+    sp.pprint(eqx)
+    sp.pprint(eqy)
+
+    # Calculate the distance form base to end effector
+    r_sqr = xDesired**2 + yDesired**2
+    # r = sp.sqrt(r_sqr)
+
+    # Calculate the angle theta which is the angle of second motor
+    cos_thera = (LM1M3**2 + LM3EE**2 - r_sqr) / (2 * LM1M3 * LM3EE)
+    thetaDesired = sp.acos(cos_thera) # Returns +-
+
+    # Calculate the angle phi which is the angle of first motor
+    LM1M3 = sp.Integer(LM1M3)  # Convert to sympy Integer for better precision
+    LM3EE = sp.Integer(LM3EE)  # Convert to sympy Integer for better precision
+    beta = math.atan2(yDesired, xDesired)
+    gamma = math.atan2(LM3EE * sp.sin(thetaDesired), LM1M3 + LM3EE * sp.cos(thetaDesired))
+    phiDesired = beta - gamma
 
     return phiDesired, thetaDesired
 
@@ -199,12 +225,9 @@ class prarobClientNode(Node):
         self.move_robot([phiD, 0, thetaD], durationS=5)
         self.get_clock().sleep_for(Duration(seconds=6.0))
 
-        path = mm2m(np.array([[200, 100], [200, -100], [100, -100], [100, -150]])) # TODO: take values from topic
+        path = mm2m(np.array([[200, 100],[200, -100],[100, -100],[100, -150]])) # TODO: take values from topic
 
         newPath = True # TODO:Terminal GUI
-
-        Brot, Pitch, EErot = activePos(False)
-        self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
 
         if newPath == True:
             for i in path:
@@ -216,13 +239,13 @@ class prarobClientNode(Node):
 
 
                         print("Accessible area")
-                        Brot, EErot = inverse(DIRECT_MAT, LM1M3, LM3EE, path[i, 1], path[i, 2])
-                        self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-                        #self.get_clock().sleep_for(Duration(seconds = 6.0))
+                        phiD, thetaD = inverse(DIRECT_MAT, LM1M3, LM3EE, path[i, 1], path[i, 2])
+                        self.move_robot([phiD, 0, BrotOffset(thetaD)], durationS=5)
+                        self.get_clock().sleep_for(Duration(seconds=6.0))
                         if i == 1:
-                            phiD, Pitch, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
-                            self.move_robot([Brot, Pitch, BrotOffset(EErot)], durationS = 1.5)
-                            #self.get_clock().sleep_for(Duration(seconds = 6.0))
+                            phiD, alphaD, thetaD = activePos(True) # Set arm to active position (Only motor 2 taken to account)
+                            self.move_robot([phiD, 0, BrotOffset(thetaD)], durationS=5)
+                            self.get_clock().sleep_for(Duration(seconds=6.0))
 
                 else:
                     print("Outside working area")
@@ -238,7 +261,9 @@ class prarobClientNode(Node):
         goal_trajectory.joint_names.append('EErot')
 
         goal_point = JointTrajectoryPoint()
-        goal_point.positions.append(q)
+        goal_point.positions.append(q[0])
+        goal_point.positions.append(q[1])
+        goal_point.positions.append(q[2])
         goal_point.time_from_start = Duration(durationS).to_msg()
 
         goal_trajectory.points.append(goal_point)
